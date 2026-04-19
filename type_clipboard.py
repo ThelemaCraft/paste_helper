@@ -50,103 +50,80 @@ class INPUT(ctypes.Structure):
 
 # ========== 发送单个 Unicode 字符 ==========
 def send_unicode_char(char):
-    """通过 Windows API 发送一个 Unicode 字符（按下+弹起）"""
     code = ord(char)
-    
-    # 按下
     inp_down = INPUT(type=INPUT_KEYBOARD)
     inp_down.u.ki = KEYBDINPUT(
-        wVk=0,
-        wScan=code,
-        dwFlags=KEYEVENTF_UNICODE,
-        time=0,
-        dwExtraInfo=None
+        wVk=0, wScan=code, dwFlags=KEYEVENTF_UNICODE,
+        time=0, dwExtraInfo=None
     )
     ctypes.windll.user32.SendInput(1, ctypes.byref(inp_down), ctypes.sizeof(inp_down))
     
-    # 弹起
     inp_up = INPUT(type=INPUT_KEYBOARD)
     inp_up.u.ki = KEYBDINPUT(
-        wVk=0,
-        wScan=code,
-        dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
-        time=0,
-        dwExtraInfo=None
+        wVk=0, wScan=code, dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
+        time=0, dwExtraInfo=None
     )
     ctypes.windll.user32.SendInput(1, ctypes.byref(inp_up), ctypes.sizeof(inp_up))
 
 # ========== 发送 Enter 键 ==========
 def send_enter():
-    """发送 Enter 键"""
     VK_RETURN = 0x0D
-    
-    # 按下
     inp_down = INPUT(type=INPUT_KEYBOARD)
     inp_down.u.ki = KEYBDINPUT(
-        wVk=VK_RETURN,
-        wScan=0,
-        dwFlags=0,
-        time=0,
-        dwExtraInfo=None
+        wVk=VK_RETURN, wScan=0, dwFlags=0,
+        time=0, dwExtraInfo=None
     )
     ctypes.windll.user32.SendInput(1, ctypes.byref(inp_down), ctypes.sizeof(inp_down))
     
-    # 弹起
     inp_up = INPUT(type=INPUT_KEYBOARD)
     inp_up.u.ki = KEYBDINPUT(
-        wVk=VK_RETURN,
-        wScan=0,
-        dwFlags=KEYEVENTF_KEYUP,
-        time=0,
-        dwExtraInfo=None
+        wVk=VK_RETURN, wScan=0, dwFlags=KEYEVENTF_KEYUP,
+        time=0, dwExtraInfo=None
     )
     ctypes.windll.user32.SendInput(1, ctypes.byref(inp_up), ctypes.sizeof(inp_up))
 
-# ========== 发送完整字符串（支持换行 + 可中断） ==========
+# ========== 检测 ESC 键（全局，无需焦点）==========
+def is_esc_pressed():
+    """返回 True 表示 ESC 键正在被按下"""
+    return bool(ctypes.windll.user32.GetAsyncKeyState(0x1B) & 0x8000)
+
+# ========== 主函数 ==========
 def type_clipboard(delay=0.008, wait_seconds=3):
-    """
-    将剪贴板内容逐字符模拟键盘输入
-    delay: 每字符间隔（秒），默认 0.008
-    wait_seconds: 运行前等待时间，默认 3 秒
-    按 Ctrl+C 可随时中断输入
-    """
-    # 获取剪贴板内容
     text = pyperclip.paste()
     if not text:
         print("剪贴板为空")
         return
     
     print(f"将在 {wait_seconds} 秒后开始输入，共 {len(text)} 个字符...")
-    print("提示：按 Ctrl+C 可随时中断输入")
+    print("提示：按 ESC 键可随时中断输入")
+    
+    # 倒计时 + 检测 ESC
+    for remaining in range(wait_seconds, 0, -1):
+        if is_esc_pressed():
+            print("\n用户按 ESC 中断！")
+            return
+        print(f"\r{remaining} 秒后开始...", end="")
+        time.sleep(1)
+    print("\r开始输入！          ")
     
     try:
-        time.sleep(wait_seconds)
-        
-        print("开始输入...")
         for i, ch in enumerate(text):
-            # 检查是否被中断
+            if is_esc_pressed():
+                print("\n用户按 ESC 中断！已停止输入。")
+                return
+            
             if ch == '\n':
-                send_enter()      # 换行符发送 Enter 键
+                send_enter()
             else:
                 send_unicode_char(ch)
             time.sleep(delay)
-            # 每 100 个字符打印一次进度
+            
             if (i + 1) % 100 == 0:
                 print(f"已输入 {i+1}/{len(text)} 字符")
         
         print("输入完成！")
-        
-    except KeyboardInterrupt:
-        print("\n\n用户中断！已停止输入。")
-        sys.exit(0)
+    except Exception as e:
+        print(f"错误: {e}")
 
-# ========== 主程序 ==========
 if __name__ == "__main__":
-    # 使用方法：
-    # 1. 先复制你想要输入的内容（Ctrl+C）
-    # 2. 运行此脚本
-    # 3. 在倒计时结束前切换到目标窗口并点击输入框
-    # 4. 按 Ctrl+C 可随时中断
-    
-    # 可以在这里修改参数
     type_clipboard(delay=0.008, wait_seconds=3)
